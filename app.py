@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
-# --- 1. 必须保留的自定义类定义 (防止加载报错) ---
 class FrequencyTrimmer(BaseEstimator, TransformerMixin):
     def __init__(self, max_categories=20):
         self.max_categories = max_categories
@@ -12,102 +11,378 @@ class FrequencyTrimmer(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None): return self
     def transform(self, X): return X
 
-# --- 2. 页面设置 ---
-st.set_page_config(page_title="Bladder Cancer Recurrence Risk Predictor", layout="wide")
+st.set_page_config(
+    page_title="Bladder Cancer Recurrence Risk Predictor",
+    page_icon="⊕",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
-# --- 3. 加载模型 ---
+st.markdown("""
+<style>
+  /* ── Global ── */
+  [data-testid="stAppViewContainer"] { background: #f0f4f8; }
+  [data-testid="stHeader"]           { background: transparent; }
+  [data-testid="stSidebar"]          { display: none; }
+
+  /* ── Strip all column top-padding so cards align perfectly ── */
+  [data-testid="stColumn"] > div:first-child {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+  }
+  [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"]:first-child {
+    margin-top: 0 !important;
+  }
+
+  /* ── Header banner ── */
+  .app-header {
+    background: linear-gradient(135deg, #1a3a5c 0%, #2b6cb0 100%);
+    color: white;
+    padding: 2rem 2.5rem 1.8rem;
+    border-radius: 14px;
+    margin-bottom: 1.6rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 1.2rem;
+  }
+  .app-header-icon {
+    flex-shrink: 0;
+    margin-top: .15rem;
+    opacity: .92;
+  }
+  .app-header h1 {
+    font-size: 2.4rem;
+    font-weight: 800;
+    margin: 0 0 .45rem;
+    letter-spacing: -.02em;
+    line-height: 1.15;
+  }
+  .app-header p  { font-size: .98rem; margin: 0; opacity: .82; line-height: 1.5; }
+
+  /* ── Cards ── */
+  .card {
+    background: white;
+    border-radius: 14px;
+    padding: 1.6rem 1.8rem 1.8rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,.07);
+  }
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .82rem;
+    font-weight: 700;
+    color: #1a3a5c;
+    margin-bottom: 1.2rem;
+    padding-bottom: .65rem;
+    border-bottom: 2px solid #e2e8f0;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+  }
+
+  /* ── Input labels: darker, more legible ── */
+  [data-testid="stWidgetLabel"] p,
+  [data-testid="stWidgetLabel"] {
+    color: #2d3748 !important;
+    font-weight: 600 !important;
+    font-size: .88rem !important;
+  }
+  [data-testid="stNumberInput"] input {
+    font-size: .95rem !important;
+  }
+
+  /* ── Generate button ── */
+  div.stButton > button {
+    background: linear-gradient(135deg, #2b6cb0, #1a3a5c);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: .7rem 2rem;
+    font-size: 1rem;
+    font-weight: 700;
+    width: 100%;
+    letter-spacing: .03em;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+    margin-top: .6rem;
+  }
+  div.stButton > button:hover  { opacity: .88; }
+  div.stButton > button:active { transform: scale(.99); }
+
+  /* ── Probability gauge ── */
+  .gauge-wrap { text-align: center; padding: 1.2rem 0 .6rem; }
+  .gauge-value {
+    font-size: 3.8rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: .35rem;
+    letter-spacing: -.03em;
+  }
+  .gauge-label { font-size: .88rem; color: #718096; letter-spacing: .03em; text-transform: uppercase; }
+
+  /* ── Risk badge ── */
+  .risk-badge {
+    display: inline-block;
+    padding: .4rem 1.2rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: .92rem;
+    margin: .6rem 0;
+    letter-spacing: .02em;
+  }
+  .risk-low      { background:#c6f6d5; color:#22543d; }
+  .risk-low-mid  { background:#bee3f8; color:#2a4365; }
+  .risk-mid      { background:#fefcbf; color:#744210; }
+  .risk-mid-high { background:#fed7aa; color:#7b341e; }
+  .risk-high     { background:#fed7d7; color:#742a2a; }
+
+  /* ── Progress bar ── */
+  .prob-bar-bg {
+    background: #e2e8f0;
+    border-radius: 999px;
+    height: 12px;
+    overflow: hidden;
+    margin: .7rem 0 1.1rem;
+  }
+  .prob-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width .7s cubic-bezier(.4,0,.2,1);
+  }
+
+  /* ── Advice box ── */
+  .advice-box {
+    background: #ebf8ff;
+    border-left: 4px solid #3182ce;
+    border-radius: 0 8px 8px 0;
+    padding: .85rem 1.1rem;
+    font-size: .9rem;
+    color: #2c5282;
+    margin-top: .8rem;
+    line-height: 1.55;
+  }
+
+  /* ── Feature row ── */
+  .feat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: .38rem 0;
+    font-size: .875rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .feat-row:last-child { border-bottom: none; }
+  .feat-key   { color: #718096; }
+  .feat-value { font-weight: 600; color: #2d3748; text-align: right; max-width: 60%; }
+
+  /* ── Placeholder (empty state) ── */
+  .empty-state {
+    background: #f7fafc;
+    border: 1.5px dashed #cbd5e0;
+    border-radius: 10px;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    margin: .5rem 0 1rem;
+  }
+  .empty-state-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+    opacity: .45;
+  }
+  .empty-state p {
+    color: #4a5568 !important;
+    font-size: .95rem !important;
+    line-height: 1.6 !important;
+    margin: 0 !important;
+  }
+  .empty-state strong { color: #2d3748; }
+
+  /* ── Disclaimer ── */
+  .disclaimer {
+    background: #fffbeb;
+    border: 1px solid #f6e05e;
+    border-radius: 10px;
+    padding: .85rem 1.3rem;
+    font-size: .82rem;
+    color: #744210;
+    margin-top: 1.2rem;
+    line-height: 1.55;
+  }
+</style>
+""", unsafe_allow_html=True)
+
+# ── SVG icon helpers ─────────────────────────────────────────────────────────
+def svg_header():
+    return """<svg class="app-header-icon" xmlns="http://www.w3.org/2000/svg"
+      width="40" height="40" viewBox="0 0 24 24" fill="none"
+      stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/>
+    </svg>"""
+
+def svg_patient():
+    return """<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+      viewBox="0 0 24 24" fill="none" stroke="#1a3a5c"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </svg>"""
+
+def svg_chart():
+    return """<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+      viewBox="0 0 24 24" fill="none" stroke="#1a3a5c"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10"/>
+      <line x1="12" y1="20" x2="12" y2="4"/>
+      <line x1="6"  y1="20" x2="6"  y2="14"/>
+    </svg>"""
+
+def svg_empty():
+    return """<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"
+      viewBox="0 0 24 24" fill="none" stroke="#a0aec0"
+      stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+      <rect x="9" y="3" width="6" height="4" rx="2"/>
+      <line x1="9" y1="12" x2="15" y2="12"/>
+      <line x1="9" y1="16" x2="13" y2="16"/>
+    </svg>"""
+
+# ── Header ───────────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="app-header">
+  {svg_header()}
+  <div>
+    <h1>Bladder Cancer 2-Year Recurrence Risk Predictor</h1>
+    <p>Enter the patient's clinical indicators to estimate individualized post-surgical recurrence probability.</p>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Load model ───────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_model():
     return joblib.load("bladder_model.joblib")
 
 model = load_model()
 
-# --- 4. 侧边栏：输入指标 ---
-st.sidebar.header("📋 Patient Clinical Indicators")
+# ── Two-column layout ─────────────────────────────────────────────────────────
+left, right = st.columns([2, 3], gap="large")
 
-def get_input():
-    st.sidebar.caption("*Note: All fields are required for accurate prediction.*")
-    
-    # 1. 连续数值 (Number Input)
-    rbc = st.sidebar.number_input(
-        "Urinary RBC Count (RBC#)", 
-        min_value=0.0, 
-        max_value=100.0, 
-        value=5.2, 
-        step=0.1,
-        help="Unit: ×10⁶/L. Normal reference range is approximately 0-8."
+with left:
+    st.markdown(f'<div class="card"><div class="card-title">{svg_patient()} Patient Clinical Indicators</div>', unsafe_allow_html=True)
+
+    rbc = st.number_input(
+        "Urinary RBC Count (RBC#)  ×10⁶/L",
+        min_value=0.0, max_value=100.0, value=5.2, step=0.1,
+        help="Normal reference range: 0–8 ×10⁶/L",
     )
 
-    # 2. 严格的下拉选择框 (去掉所有不详/空白选项)
-    # 恶性值映射
     malig_options = {
-        "High-grade": 0, 
-        "Low-grade": 1, 
-        "Other (Benign, PUNLMP, Atypical, Dysplasia)": 2
+        "High-grade": 0,
+        "Low-grade": 1,
+        "Other (Benign / PUNLMP / Atypical / Dysplasia)": 2,
     }
-    malig_choice = st.sidebar.selectbox("Malignancy Grade", options=list(malig_options.keys()))
+    malig_choice = st.selectbox("Malignancy Grade", list(malig_options))
     malignancy = malig_options[malig_choice]
 
-    # 浸润值映射
     infil_options = {"Non-invasive": 0, "Invasive": 1}
-    infil_choice = st.sidebar.selectbox("Infiltration Status", options=list(infil_options.keys()))
+    infil_choice = st.selectbox("Infiltration Status", list(infil_options))
     infiltration = infil_options[infil_choice]
 
-    # 形状值映射
-    shape_options = {"Papillary": 0, "Non-papillary (Cauliflower, Nodular, etc.)": 1}
-    shape_choice = st.sidebar.selectbox("Tumor Shape", options=list(shape_options.keys()))
+    shape_options = {"Papillary": 0, "Non-papillary (Cauliflower / Nodular / etc.)": 1}
+    shape_choice = st.selectbox("Tumor Shape", list(shape_options))
     shape = shape_options[shape_choice]
 
-    # 肾盂积水值映射
-    hydro_options = {"Absent": 0, "Present (Unilateral/Bilateral)": 1}
-    hydro_choice = st.sidebar.selectbox("Hydronephrosis Status", options=list(hydro_options.keys()))
+    hydro_options = {"Absent": 0, "Present (Unilateral or Bilateral)": 1}
+    hydro_choice = st.selectbox("Hydronephrosis Status", list(hydro_options))
     hydronephrosis = hydro_options[hydro_choice]
 
-    # 坏死值映射
     necro_options = {"Absent": 0, "Present": 1}
-    necro_choice = st.sidebar.selectbox("Cystic Necrosis", options=list(necro_options.keys()))
+    necro_choice = st.selectbox("Cystic Necrosis", list(necro_options))
     necrosis = necro_options[necro_choice]
 
-    # 3. 构造数据对象
-    data = {
-        '红细胞计数(RBC#)-尿液': rbc,
-        '恶性值': malignancy,
-        '浸润值': infiltration,
-        '形状值': shape,
-        '肾盂积水值': hydronephrosis,
-        '坏死值': necrosis
-    }
-    return pd.DataFrame(data, index=[0])
+    st.markdown("</div>", unsafe_allow_html=True)
 
-input_df = get_input()
+    predict_clicked = st.button("Generate Prediction")
 
-# --- 5. 主界面：展示结果 ---
-st.title("🔬 Predictive Model for 2-Year Recurrence Risk Following Bladder Cancer Surgery")
-st.write("Enter clinical characteristics in the sidebar to estimate the individualized 2-year recurrence risk.")
+with right:
+    st.markdown(f'<div class="card"><div class="card-title">{svg_chart()} Prediction Result</div>', unsafe_allow_html=True)
 
-if st.button("Generate Prediction"):
-    # 执行预测获取概率
-    prob = model.predict_proba(input_df)[0, 1]
-    
-    st.divider()
-    st.subheader(f"Predicted Recurrence Probability: {prob:.2%}")
-    
-    # 简单的风险分层
-    if prob < 0.2:
-        level, advice = "Low Risk", "Routine follow-up is recommended."
-        st.success(f"Risk Level: {level}")
-    elif prob < 0.4:
-        level, advice = "Low-Medium Risk", "Close follow-up is recommended."
-        st.info(f"Risk Level: {level}")
-    elif prob < 0.6:
-        level, advice = "Medium Risk", "Enhanced monitoring is recommended."
-        st.warning(f"Risk Level: {level}")
-    elif prob < 0.8:
-        level, advice = "Medium-High Risk", "Active intervention is suggested."
-        st.error(f"Risk Level: {level}")
+    if predict_clicked:
+        input_df = pd.DataFrame({
+            '红细胞计数(RBC#)-尿液': [rbc],
+            '恶性值': [malignancy],
+            '浸润值': [infiltration],
+            '形状值': [shape],
+            '肾盂积水值': [hydronephrosis],
+            '坏死值': [necrosis],
+        })
+        prob = model.predict_proba(input_df)[0, 1]
+        pct = prob * 100
+
+        if prob < 0.2:
+            level, badge_cls, bar_color = "Low Risk", "risk-low", "#48bb78"
+            advice = "Routine follow-up recommended. Standard post-operative surveillance protocol is appropriate."
+        elif prob < 0.4:
+            level, badge_cls, bar_color = "Low–Medium Risk", "risk-low-mid", "#4299e1"
+            advice = "Close follow-up recommended. Consider shortening surveillance intervals."
+        elif prob < 0.6:
+            level, badge_cls, bar_color = "Medium Risk", "risk-mid", "#d69e2e"
+            advice = "Enhanced monitoring recommended. Review adjuvant therapy options with the clinical team."
+        elif prob < 0.8:
+            level, badge_cls, bar_color = "Medium–High Risk", "risk-mid-high", "#ed8936"
+            advice = "Active intervention suggested. Multidisciplinary team consultation is advised."
+        else:
+            level, badge_cls, bar_color = "High Risk", "risk-high", "#e53e3e"
+            advice = "Immediate intervention highly recommended. Urgent specialist referral is warranted."
+
+        st.markdown(f"""
+        <div class="gauge-wrap">
+          <div class="gauge-value" style="color:{bar_color};">{pct:.1f}%</div>
+          <div class="gauge-label">2-Year Recurrence Probability</div>
+        </div>
+        <div style="text-align:center;">
+          <span class="risk-badge {badge_cls}">{level}</span>
+        </div>
+        <div class="prob-bar-bg">
+          <div class="prob-bar-fill" style="width:{pct:.1f}%;background:{bar_color};"></div>
+        </div>
+        <div class="advice-box">{advice}</div>
+        <br>
+        <div class="card-title" style="margin-top:.4rem;">{svg_patient()} Input Summary</div>
+        """, unsafe_allow_html=True)
+
+        rows = [
+            ("Urinary RBC Count", f"{rbc:.1f} ×10⁶/L"),
+            ("Malignancy Grade", malig_choice),
+            ("Infiltration Status", infil_choice),
+            ("Tumor Shape", shape_choice),
+            ("Hydronephrosis", hydro_choice),
+            ("Cystic Necrosis", necro_choice),
+        ]
+        for key, val in rows:
+            st.markdown(
+                f'<div class="feat-row"><span class="feat-key">{key}</span>'
+                f'<span class="feat-value">{val}</span></div>',
+                unsafe_allow_html=True,
+            )
+
     else:
-        level, advice = "High Risk", "Immediate intervention is highly recommended."
-        st.error(f"Risk Level: {level}")
+        st.markdown(f"""
+        <div class="empty-state">
+          <div class="empty-state-icon">{svg_empty()}</div>
+          <p>Fill in the patient indicators on the left<br>
+          and click <strong>Generate Prediction</strong> to view results.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-st.write("")
-st.info("⚠️ Disclaimer: This tool is intended for research and educational purposes only. It does not constitute medical advice or a formal clinical diagnosis.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ── Disclaimer ───────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="disclaimer">
+  <strong>Disclaimer:</strong> This tool is intended for research and educational purposes only.
+  It does not constitute medical advice or a formal clinical diagnosis.
+  All clinical decisions must be made by qualified healthcare professionals.
+</div>
+""", unsafe_allow_html=True)
